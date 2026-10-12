@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "applicationId": "app-lifecycle-test",
+  "version": "0.1.0",
+  "name": "资料与写作助手",
+  "description": "整理资料、提炼要点并形成可以继续修改的文稿。",
+  "expert": {
+    "systemPrompt": "你是用户的资料整理与写作助手。依据用户提供的资料工作，保留出处，区分事实与推断。先明确写作目标，使用资料对照技能，生成结构清晰的文稿。使用连接器时遵守授权和工具确认规则。输出写入 outputs/ 下的 Markdown 文件。",
+    "welcomeMessage": "把资料和写作目标告诉我，我们一起完成这篇文稿。"
+  },
+  "dependencies": {
+    "connectors": [],
+    "knowledgeBases": [],
+    "skillPackages": [],
+    "skills": [
+      {
+        "slug": "source-comparison",
+        "content": "---\nname: source-comparison\ndescription: 对照多份资料，保留来源并识别差异。\n---\n读取用户指定的材料，为每份材料列出来源、主要事实、结论与未知项。对同一主题逐项比较；不同来源冲突时并列展示，不自行消除。用表格表达比较结果，最后按写作目标形成提纲。所有引文需能定位到原始资料。输出到用户要求的工作区路径。",
+        "files": []
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "intro",
+      "kind": "text",
+      "title": "从资料，到清晰的表达",
+      "text": "上传资料，描述目标。文稿和整理结果会保存在你的工作区。"
+    },
+    {
+      "id": "files",
+      "kind": "upload",
+      "title": "添加资料"
+    },
+    {
+      "id": "goal",
+      "kind": "form",
+      "title": "这次想写什么？",
+      "actionId": "draft",
+      "field": "goal"
+    },
+    {
+      "id": "sources",
+      "kind": "detail",
+      "title": "资料要点",
+      "path": "outputs/sources.md"
+    },
+    {
+      "id": "draft",
+      "kind": "editor",
+      "title": "我的文稿",
+      "path": "outputs/draft.md"
+    },
+    {
+      "id": "history",
+      "kind": "list",
+      "title": "文稿与历史",
+      "path": "outputs"
+    },
+    {
+      "id": "progress",
+      "kind": "progress",
+      "title": "执行状态"
+    },
+    {
+      "id": "conversation",
+      "kind": "chat",
+      "title": "继续对话"
+    }
+  ],
+  "actions": [
+    {
+      "id": "compare",
+      "label": "整理资料",
+      "prompt": "阅读当前对话中的资料，用 source-comparison 技能提炼要点、出处与分歧。",
+      "resultPath": "outputs/sources.md",
+      "requiresConfirmation": false
+    },
+    {
+      "id": "draft",
+      "label": "生成文稿",
+      "prompt": "根据用户输入的 goal 和提供的资料生成文稿。先阅读已有的 outputs/draft.md（若存在），保留用户已作的修改。不要编造引用。",
+      "resultPath": "outputs/draft.md",
+      "requiresConfirmation": false
+    }
+  ],
+  "automations": [],
+  "acceptance": [
+    "导入资料后能查看有来源的要点",
+    "文稿可编辑、保存并导出 Markdown",
+    "关闭应用后重新打开仍能看到历史文稿"
+  ]
+}

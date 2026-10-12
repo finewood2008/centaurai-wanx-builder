@@ -1,0 +1,228 @@
+--- a/src/octop/api/common/builder_access.py
++++ b/src/octop/api/common/builder_access.py
+@@ -60,6 +60,11 @@
+             return method in {"GET", "POST", "PATCH", "DELETE"}
+         if "skills" in caps and re.fullmatch(r"skills(?:/[^/]+)*", suffix):
+             return method in {"GET", "POST", "PUT", "DELETE"}
++        if "skills" in caps and (
++            (suffix == "skill-packages" and method in {"GET", "PUT"})
++            or (re.fullmatch(r"skill-packages/[^/]+/copy", suffix) and method == "POST")
++        ):
++            return True
+         if builder and (
+             suffix in {"", "stop", "avatar"}
+             or re.fullmatch(
+--- a/src/octop/infra/agents/manager.py
++++ b/src/octop/infra/agents/manager.py
+@@ -3009,6 +3009,16 @@
+         backend_spec = cfg.get("backend")
+         if workspace_dir is None:
+             workspace_dir = self.resolve_workspace_dir(row.agent_id)
++        # Existing package programs run in this user's private workspace.
++        # CompositionBoundary checks the declared package and original bytes.
++        if cfg.get("skill_package_ids") and application_id(row) not in {"wanx", "zhijun"}:
++            from octop.infra.applications.composition import instance_uses_composition
++
++            if instance_uses_composition(self, row) or (
++                application_id(row) == "wanx-builder"
++                and (row.description or "").startswith("WANX_BUILDER_TRIAL:")
++            ):
++                return {"type": "local_shell", "root_dir": str(workspace_dir), "virtual_mode": True}
+         if backend_spec is None:
+             return default_agent_backend_spec(workspace_dir)
+         resolved = resolve_agent_backend_spec(
+@@ -3764,7 +3774,11 @@
+                 allowed.update(str(getattr(tool, "name", "")) for tool in merged_tools)
+             from octop.infra.applications.composition import instance_uses_composition
+ 
+-            if instance_uses_composition(self, row):
++            if instance_uses_composition(self, row) or (
++                application_id(row) == "wanx-builder"
++                and (row.description or "").startswith("WANX_BUILDER_TRIAL:")
++                and cfg.get("skill_package_ids")
++            ):
+                 from octop.infra.applications.composition import COMPOSITION_TOOLS
+ 
+                 allowed.update(COMPOSITION_TOOLS)
+--- a/src/octop/infra/agents/middleware/composition.py
++++ b/src/octop/infra/agents/middleware/composition.py
+@@ -11,7 +11,7 @@
+ from langchain.agents.middleware import AgentMiddleware
+ from langchain_core.messages import ToolMessage
+ 
+-from octop.infra.applications.composition import BASE_TOOLS, COMPOSITION_TOOLS
++from octop.infra.applications.composition import BASE_TOOLS, COMPOSITION_TOOLS, native_package_file
+ from octop.infra.applications.lifecycle_models import ApplicationDefinition
+ 
+ 
+@@ -33,7 +33,7 @@
+     return bool(re.fullmatch(r"outputs/[a-zA-Z0-9_/.-]+\.(?:md|txt|json|csv)", path))
+ 
+ 
+-def package_command_allowed(command: str, roots: list[Path]) -> bool:
++def package_command_allowed(command: str, roots: list[Path], workspace: Path | None = None) -> bool:
+     # Only an existing, mounted package program; never interpreter inline code,
+     # command substitution, pipes or a generated workspace program.
+     if any(c in command for c in "\n\r;|&`$<>"):
+@@ -48,6 +48,8 @@
+             else argv[0]
+         )
+         file = Path(program)
++        if workspace is not None:
++            return file.is_absolute() and native_package_file(program, roots, workspace) is not None
+         return (
+             file.is_absolute()
+             and file.is_file()
+@@ -152,7 +154,9 @@
+                 for p in definition.dependencies.skillPackages
+                 if store.repo.get(p)
+             ]
+-            allowed = allowed and package_command_allowed(args.get("command", ""), roots)
++            allowed = allowed and package_command_allowed(
++                args.get("command", ""), roots, self.registry.resolve_workspace_dir(self.agent_id)
++            )
+         if not allowed:
+             return ToolMessage(
+                 content="COMPOSITION_BOUNDARY: use native capabilities and declarative configuration only",
+--- a/src/octop/infra/applications/composition.py
++++ b/src/octop/infra/applications/composition.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++from pathlib import Path
+ from typing import Any
+ 
+ from octop.infra.agents.settings.tool_catalog import builtin_tool_available, tools_disabled_set
+@@ -46,6 +47,39 @@
+ )
+ 
+ 
++def native_package_file(path: str, roots: list[Path], workspace: Path) -> Path | None:
++    """Match a native package file, or its unmodified private workspace copy."""
++    skills = workspace / ".octop" / "skills"
++    if not skills.is_dir():
++        skills = workspace / "skills"
++    if path.startswith(("skills/", "/skills/")):
++        path = str(skills / path.lstrip("/").removeprefix("skills/"))
++    elif path.startswith("/.octop/skills/"):
++        path = str(workspace / path.lstrip("/"))
++    file = Path(path)
++    file = file if file.is_absolute() else workspace / file
++    try:
++        file = file.resolve()
++        if not file.is_file():
++            return None
++        for root in roots:
++            root = root.resolve()
++            if file.is_relative_to(root):
++                return file
++        relative = file.relative_to(skills.resolve())
++        for root in roots:
++            original = (root / relative).resolve()
++            if (
++                original.is_relative_to(root.resolve())
++                and original.is_file()
++                and original.read_bytes() == file.read_bytes()
++            ):
++                return original
++    except (OSError, ValueError):
++        pass
++    return None
++
++
+ def _catalog_user(user: User | UserRow | None) -> User:
+     """Native tools read fresh rows; HTTP adapters already provide a User identity."""
+     if user is None or (isinstance(user, UserRow) and user.disabled):
+--- a/src/octop/infra/applications/composition_evidence.py
++++ b/src/octop/infra/applications/composition_evidence.py
+@@ -7,6 +7,7 @@
+ 
+ from langchain_core.messages import messages_from_dict
+ 
++from octop.infra.applications.composition import native_package_file
+ from octop.infra.applications.lifecycle_models import ApplicationDefinition
+ from octop.infra.errors import ErrorCode, OctopError
+ from octop.infra.history.legacy import checkpoint_snapshot
+@@ -86,7 +87,22 @@
+                 verified = verified and any(n.startswith(ref.source + "_") for n in names)
+             elif ref.kind == "builtin":
+                 verified = verified and ref.source in names
+-            elif ref.kind in {"instruction-skill", "skill-package"}:
++            elif ref.kind == "skill-package":
++                from octop.infra.skills.skill_package_store import SkillPackageStore
++
++                registry = runtime.agent_registry
++                store = SkillPackageStore(
++                    repo=registry._repos.skill_package_repo, root=registry._paths.skill_packages_dir
++                )
++                roots = [store.package_skills_dir(ref.source)] if store.repo.get(ref.source) else []
++                workspace = registry.resolve_workspace_dir(agent_id)
++                verified = verified and any(
++                    c["name"] == "read_file"
++                    and str(c.get("args", {}).get("file_path", "")).endswith("/SKILL.md")
++                    and native_package_file(c["args"]["file_path"], roots, workspace) is not None
++                    for c in successful
++                )
++            elif ref.kind == "instruction-skill":
+                 verified = verified and any(
+                     c["name"] == "read_file"
+                     and "SKILL.md" in str(c.get("args", {}))
+--- a/src/octop/infra/applications/lifecycle_models.py
++++ b/src/octop/infra/applications/lifecycle_models.py
+@@ -34,6 +34,7 @@
+ 
+ 
+ class ExpertDefinition(Contract):
++    templateId: Annotated[str, Field(min_length=1, max_length=180)] | None = None
+     systemPrompt: Annotated[str, Field(min_length=1, max_length=80000)]
+     welcomeMessage: Annotated[str, Field(min_length=1, max_length=500)]
+ 
+@@ -86,7 +87,7 @@
+ 
+ 
+ class TemplateDefinition(Contract):
+-    templateId: Literal["conversation", "form-results", "materials-editor"]
++    templateId: Literal["conversation", "form-results", "materials-editor", "creation-studio", "analysis-dashboard", "operations-console", "learning-studio", "office-workbench", "decision-room", "service-planner", "engineering-workbench"]
+     templateVersion: Literal[1]
+ 
+ 
+@@ -116,7 +117,7 @@
+ class ComponentDefinition(Contract):
+     id: Identifier
+     kind: Literal[
+-        "text", "chat", "upload", "form", "list", "editor", "detail", "progress", "confirm"
++        "text", "chat", "upload", "form", "list", "editor", "detail", "progress", "confirm", "table", "chart", "board", "checklist"
+     ]
+     title: Annotated[str, Field(min_length=1, max_length=100)]
+     text: Text | None = None
+@@ -128,7 +129,7 @@
+     def valid_path(self) -> ComponentDefinition:
+         if self.path is not None:
+             workspace_path(self.path)
+-        if self.kind in {"editor", "detail", "list"} and not self.path:
++        if self.kind in {"editor", "detail", "list", "table", "chart", "board", "checklist"} and not self.path:
+             raise ValueError("component path required")
+         if self.kind == "editor" and not str(self.path).startswith("outputs/"):
+             raise ValueError("editor must write outputs")
+--- a/src/octop/infra/applications/models.py
++++ b/src/octop/infra/applications/models.py
+@@ -109,7 +109,7 @@
+     @field_validator("agent_template")
+     @classmethod
+     def validate_template(cls, value: dict[str, Any]) -> dict[str, Any]:
+-        allowed = {"name", "description", "default_model", "system_prompt", "welcome_message"}
++        allowed = {"name", "description", "default_model", "system_prompt", "welcome_message", "template_name"}
+         if "composition_schema" in value and value["composition_schema"] != 2:
+             raise ValueError("unsupported composition schema")
+         if set(value) - (allowed | {"composition_schema"}) or any(
+--- a/src/octop/infra/applications/service.py
++++ b/src/octop/infra/applications/service.py
+@@ -375,6 +375,7 @@
+                 application_id=application_id,
+                 description=str(template.get("description", product.description)),
+                 default_model=str(model) if model else None,
++                template_name=template.get("template_name"),
+                 system_prompt=template.get("system_prompt"),
+                 welcome_message=template.get("welcome_message"),
+                 is_shared=False,

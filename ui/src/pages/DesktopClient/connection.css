@@ -1,0 +1,160 @@
+.builder-login {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  background: #faf9f5;
+  color: #293d34;
+}
+.builder-login-story {
+  padding: 44px 58px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #e9eee5;
+  min-height: 700px;
+}
+.builder-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.builder-login-eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #718174;
+}
+.builder-login-story h1 {
+  font-size: 48px;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: -1.6px;
+  margin: 24px 0;
+}
+.builder-login-story p {
+  max-width: 430px;
+  font-size: 15px;
+  line-height: 1.9;
+  color: #6c7c70;
+}
+.builder-login-modes {
+  display: flex;
+  gap: 32px;
+  margin-top: 44px;
+}
+.builder-login-modes span {
+  font-size: 16px;
+}
+.builder-login-modes small {
+  display: block;
+  font-size: 11px;
+  margin-top: 8px;
+  color: #6c7c70;
+}
+.builder-login-story > small {
+  font-size: 11px;
+  color: #7c887d;
+}
+.builder-login-panel {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 54px;
+}
+.builder-login-form {
+  width: 100%;
+  max-width: 350px;
+}
+.builder-login-form h2 {
+  font-size: 25px;
+  font-weight: 500;
+  margin: 15px 0;
+}
+.builder-login-form > p {
+  font-size: 13px;
+  color: #7b837b;
+  line-height: 1.8;
+  margin: 0 0 32px;
+}
+.builder-login-form .ant-btn-primary {
+  margin-top: 12px;
+}
+.builder-login-form .ant-alert {
+  margin-bottom: 12px;
+}
+.builder-login-footnote {
+  font-size: 12px;
+  color: #7b837b;
+  line-height: 1.8;
+  margin-top: 22px !important;
+  overflow-wrap: anywhere;
+}
+.builder-connect-launch {
+  position: absolute;
+  right: 28px;
+  bottom: 26px;
+}
+.builder-service-current {
+  display: flex;
+  gap: 14px;
+  padding: 17px;
+  background: #f0f3ed;
+  border-radius: 12px;
+  margin: 20px 0;
+}
+.builder-service-current div,
+.builder-service > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.builder-service-current small,
+.builder-service small,
+.builder-service span {
+  color: #7b837b;
+  font-size: 12px;
+}
+.builder-service-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 22px;
+}
+.builder-service-heading h3 {
+  font-size: 15px;
+  font-weight: 500;
+}
+.builder-service-list {
+  max-height: 280px;
+  overflow: auto;
+  margin: 12px 0 22px;
+}
+.builder-service {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e5e9e1;
+}
+.builder-connection-bar {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--fn-border-color);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.builder-connection-info {
+  padding: 32px;
+}
+@media (max-width: 1100px) {
+  .builder-login-story {
+    padding: 36px;
+  }
+  .builder-login-story h1 {
+    font-size: 38px;
+  }
+  .builder-login-panel {
+    padding: 35px;
+  }
+}

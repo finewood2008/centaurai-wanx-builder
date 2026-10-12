@@ -1,0 +1,41 @@
+# Dependencies and generated products
+node_modules
+dist-ui/
+dist/
+release/
+*.app/
+*.dmg
+*.tsbuildinfo
+__pycache__/
+*.pyc
+
+# Local configuration, credentials and runtime data
+deployment.json
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite*
+*.pem
+*.key
+*.log
+.DS_Store
+verification/
+
+# Local server copies, deployment receipts and maintenance helpers
+docs/backend-baseline/
+docs/catalog-030-fix/
+docs/**/before/
+docs/**/candidate/
+docs/**/conflicts/
+docs/**/deployment.json
+docs/**/manifest.json
+docs/composition-update/
+docs/server-update/
+docs/conversation-update/
+docs/hitl-resume-update/
+docs/standard-apps-update/
+docs/backend-changes.patch
+docs/template-studio.md
+docs/application-center-update/README.md
+tools/deploy-*.py
